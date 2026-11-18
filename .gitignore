@@ -6,5 +6,4 @@
 *.synctex.gz
 qa_*/
 tmp/
-data/*.mat
 !protocol/**/*.mat

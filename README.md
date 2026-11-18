@@ -23,7 +23,7 @@ Place each dataset in `data/` as a MAT file containing either:
 - `X` (features by samples) and `y` (samples by 1), or
 - `fea` (samples by features) and `gnd` (samples by 1).
 
-Expected filenames are `AR.mat`, `PIE.mat`, `MSRA25.mat`, `YaleB.mat`, `COIL20.mat`, `COIL100.mat`, `MNIST.mat`, `Palm.mat`, and `Optdigits.mat`. The datasets retain their original distribution terms and are therefore not redistributed here.
+The `data/` directory contains the nine datasets used in the experiments: `AR.mat`, `PIE.mat`, `MSRA25.mat`, `YaleB.mat`, `COIL20.mat`, `COIL100.mat`, `MNIST.mat`, `Palm.mat`, and `Optdigits.mat`.
 
 ## Quick start
 
