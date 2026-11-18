@@ -1,0 +1,40 @@
+\begin{table}[H]
+\centering
+\caption{Paired significance of MCS-NMF against the competing methods. Symbols $+$, $-$, and 0 denote significantly better, significantly worse, or no significant difference after Holm adjustment, respectively (two-sided paired $t$-tests, familywise $\alpha=0.05$).}
+\label{tab:paired_significance}
+\setlength{\tabcolsep}{3.2pt}
+\small
+\renewcommand{\arraystretch}{0.78}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llccccccccc}
+\toprule
+Metric & Baseline & AR & PIE & MSRA25 & YaleB & COIL20 & COIL100 & MNIST & Palm & Optdigits \\
+\midrule
+\multirow{12}{*}{ACC} & HLPNMF & + & + & 0 & + & + & + & + & + & 0 \\
+ & LpCNMF & + & + & + & + & + & + & + & + & + \\
+ & PNLPSCONMF & + & + & + & + & + & + & + & + & + \\
+ & SPNMF & + & + & + & + & + & + & + & + & + \\
+ & CSDCP & + & + & + & + & + & + & + & + & + \\
+ & LP & + & + & + & + & + & + & + & + & + \\
+ & GOCNMF & + & + & + & + & + & + & + & + & + \\
+ & OCSNMF & + & + & + & + & + & + & + & + & + \\
+ & SNMFWLP & + & + & + & + & + & + & + & + & 0 \\
+ & DSSNMF & + & + & + & + & + & + & + & + & + \\
+ & ERDNMF & 0 & + & + & + & + & + & + & 0 & + \\
+ & LSAGNMTF & + & + & + & + & + & + & + & + & + \\
+\midrule
+\multirow{12}{*}{NMI} & HLPNMF & + & + & 0 & + & + & + & + & + & 0 \\
+ & LpCNMF & + & + & + & + & + & + & + & + & + \\
+ & PNLPSCONMF & + & + & + & + & + & + & + & + & + \\
+ & SPNMF & + & + & + & + & + & + & + & + & + \\
+ & CSDCP & + & + & + & + & + & + & + & + & + \\
+ & LP & + & + & + & + & + & + & + & + & + \\
+ & GOCNMF & + & + & + & + & + & + & + & + & + \\
+ & OCSNMF & + & + & + & + & + & + & + & + & + \\
+ & SNMFWLP & + & + & + & + & + & + & + & + & + \\
+ & DSSNMF & + & + & + & + & + & + & + & + & + \\
+ & ERDNMF & + & + & + & + & + & + & + & + & + \\
+ & LSAGNMTF & + & + & + & + & + & + & + & + & + \\
+\bottomrule
+\end{tabular}}
+\end{table}

@@ -1,0 +1,15 @@
+\begin{table}[!htbp]
+\centering
+\caption{Controlled ablation of the three MCS-NMF mechanisms. Gains are full-model minus ablated-model mean differences in percentage points.}
+\label{tab:controlled_ablation}
+\footnotesize
+\begin{tabular}{llrrr}
+\toprule
+Factor & Comparison & Datasets & ACC gain & NMI gain \\
+\midrule
+Mass conservation & Row only $\rightarrow$ full & 8 & 0.309 & 0.212 \\
+Diffusion regularization & No diffusion $\rightarrow$ full & 8 & 31.241 & 28.182 \\
+High-order propagation & First order $\rightarrow$ selected order & 4 & 0.795 & 0.802 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,10 @@
+*.asv
+*.aux
+*.log
+*.out
+*.spl
+*.synctex.gz
+qa_*/
+tmp/
+data/*.mat
+!protocol/**/*.mat

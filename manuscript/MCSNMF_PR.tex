@@ -1,0 +1,468 @@
+\documentclass[times, review, 10pt]{elsarticle}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+\usepackage{booktabs,multirow,array,tabularx,longtable}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue]{hyperref}
+\usepackage{url}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{placeins}
+\usepackage{flafter}
+\usepackage{pdflscape}
+\usepackage[normalem]{ulem}
+
+\newfloat{algorithm}{tbp}{loa}
+\floatname{algorithm}{Algorithm}
+\floatstyle{ruled}
+\restylefloat{algorithm}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\one}{\mathbf{1}}
+\newcommand{\odotm}{\mathbin{\odot}}
+\newcommand{\Tr}{\operatorname{Tr}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\graphicspath{{figures/}}
+\biboptions{numbers,sort&compress}
+\journal{Pattern Recognition}
+\allowdisplaybreaks
+\setlength{\textfloatsep}{12pt plus 2pt minus 3pt}
+\setlength{\floatsep}{10pt plus 2pt minus 2pt}
+
+\begin{document}
+\raggedbottom
+\begin{frontmatter}
+
+\title{Mass-Conserving Semantic Nonnegative Matrix Factorization for Semi-Supervised Clustering}
+
+\author{Deshu Sun\corref{cor1}}
+\cortext[cor1]{Corresponding author}
+\ead{sundeshu@gzmu.edu.cn}
+\author{Feng Wang}
+\address{College of Data Science and Information Engineering, Guizhou Minzu University, Guiyang, Guizhou 550025, P.R. China}
+
+\begin{abstract}
+Semi-supervised nonnegative matrix factorization commonly propagates label information through a nonnegative coefficient matrix but controls each sample independently. Consequently, local propagation can produce a globally distorted allocation of semantic mass across classes. We propose mass-conserving semantic nonnegative matrix factorization (MCS-NMF), which constrains the unlabeled semantic block to a transport polytope. Each unlabeled row lies on the probability simplex, and its aggregate column marginal matches the class proportions estimated from the labeled set. The constraint is imposed directly on the semantic factor of a high-order diffusion-regularized NMF model and introduces no additional regularization parameter. We develop an alternating solver combining a multiplicative basis update, exponentiated semantic descent, Sinkhorn marginal projection, and monotone backtracking. The accepted iterates preserve nonnegativity and semantic marginals and yield a convergent objective-value sequence. Under a shared class-stratified supervision protocol, experiments with 12 baselines on nine datasets show that MCS-NMF obtains the highest mean ACC on eight datasets and the highest mean NMI on eight datasets. Paired tests and 10,000-resample bootstrap intervals establish broad gains and quantify the dataset-specific outcomes on AR and Optdigits. Supervision, robustness, parameter, ablation, convergence, scalability, long-tail, and t-SNE analyses characterize semantic mass conservation.
+\end{abstract}
+
+\begin{keyword}
+semi-supervised clustering \sep nonnegative matrix factorization \sep semantic mass conservation \sep transport polytope \sep high-order diffusion
+\end{keyword}
+\end{frontmatter}
+
+\section{Introduction}
+
+Clustering seeks a compact partition of unlabeled observations, whereas semi-supervised clustering uses limited annotations or constraints to reduce partition ambiguity \cite{Jain1999Clustering,Jain2010Clustering,Bair2013SSC,VanEngelen2020Survey}. Nonnegative matrix factorization (NMF) is well suited to this setting because it learns additive bases and nonnegative coefficients that can be interpreted as cluster evidence \cite{Lee1999NMF,Lee2001Algorithms,Gillis2014WhyHow}. Label constraints, graph regularization, hypergraph relations, and label propagation have therefore been incorporated into NMF to transfer sparse supervision across a data manifold \cite{Liu2012CNMF,Cai2011GNMF,Zeng2014HypergraphNMF,Yi2015LpSNMF,Lan2022LPNMF,Wang2015ConstraintNMF}.
+
+Most propagation-guided NMF models focus on local semantic consistency. A labeled coefficient is fixed or encouraged toward its class indicator, and a graph or hypergraph operator transfers this information to nearby unlabeled samples \cite{Wang2022PNLP,Yin2023HSSNMF,Mo2024PNLPSCNMF,Li2025GOCNMF,Li2025OCSNMF,Yang2025SPNMF,Li2026HLPNMF}. Local consistency does not determine the global amount of semantic mass assigned to each class. During propagation, several classes can absorb an excessive share of the unlabeled coefficient mass while other classes become depleted. This drift directly affects assignments decoded by the largest semantic coefficient.
+
+Global allocation constraints have precedents in balanced clustering, doubly stochastic factorization, and optimal-transport label allocation \cite{Yang2016Doubly,Tai2021Sinkhorn,Wang2026BSNMF}. These methods establish that class-size or marginal information can regularize a partition. Their allocation variables differ from the semantic coefficient block of a joint data-reconstruction NMF with fixed labeled rows and high-order diffusion. Sinkhorn-related semi-supervised NMF has also been studied through feature scaling \cite{Li2022SinkhornNMF}; its Sinkhorn quantity acts on input features rather than enforcing sample and class marginals on the semantic factor.
+
+This work introduces mass-conserving semantic NMF (MCS-NMF). The labeled rows are fixed to one-hot labels. Every unlabeled semantic row has unit sum, and the column sums of the unlabeled block follow the empirical labeled proportions. These two constraints form a transport polytope and prevent unconstrained global class-mass drift. They require no new trade-off coefficient: the target marginal is estimated from the available labels.
+
+The contributions are as follows.
+\begin{enumerate}[leftmargin=*]
+\item We formulate high-order graph-regularized semi-supervised NMF with a labeled-prior transport polytope imposed directly on the unlabeled semantic factor.
+\item We derive an alternating solver that combines a multiplicative nonnegative basis update with exponentiated semantic descent, Sinkhorn marginal scaling, and monotone backtracking.
+\item We establish feasibility preservation and convergence of the nonnegative objective-value sequence, and verify row and column marginal residuals numerically.
+\item We evaluate MCS-NMF against 12 baselines on nine datasets with paired supervision masks and six metrics. Statistical, supervision-budget, robustness, sensitivity, ablation, convergence, scalability, and representation analyses provide complementary evidence.
+\end{enumerate}
+
+\section{Related work}
+
+\subsection{Semi-supervised NMF}
+
+Constrained NMF introduced label-aware coefficient transformations for image representation \cite{Liu2012CNMF}. Later models combined labels with discriminative penalties \cite{Xing2021DSSNMF,Li2025EDNMF,Xing2021GNMFLD}, robust reconstruction \cite{Peng2021CSNMF}, self-supervision \cite{Chavoshinejad2023S4NMF}, graph regularization \cite{Cai2011GNMF,Li2025GOCNMF}, and symmetric factorizations \cite{Li2025OCSNMF,Yin2023HSSNMF}. Label propagation can be embedded into factorization through Gaussian-field, local-global, ordinary graph, or hypergraph mechanisms \cite{Zhu2003GaussianFields,Zhou2004LGC,Yi2015LpSNMF,Lan2022LPNMF,Wang2022PNLP}. Weighted and high-order propagation further improve the reach and selectivity of supervision \cite{Jing2026SNMFWLP,Li2026HLPNMF}. MCS-NMF retains the reconstruction--diffusion structure but changes the feasible geometry of the semantic factor.
+
+\subsection{Global balance and transport constraints}
+
+Doubly stochastic low-rank decomposition uses probabilistic normalization to regularize unsupervised cluster assignments \cite{Yang2016Doubly}. Sinkhorn label allocation solves a class-proportion-aware transport problem within semi-supervised self-training \cite{Tai2021Sinkhorn}. Balanced symmetric NMF uses a soft regularizer to control cluster sizes \cite{Wang2026BSNMF}. Size-constrained and balanced clustering similarly demonstrate the value of global allocation information. MCS-NMF differs at the formula level: the transport allocation is the semantic factor that simultaneously reconstructs the data, receives high-order diffusion, and contains fixed labeled rows.
+
+\subsection{Graph and hypergraph diffusion}
+
+Graphs encode pairwise neighborhoods, while hypergraphs model higher-order relations among groups of samples \cite{Qiao2018GraphReview,Gao2022HypergraphReview,Song2023GSSLReview}. Repeated transitions enlarge the propagation range but can also amplify global allocation drift. We use a symmetric transition matrix and its $k$-step diffusion to form a positive-semidefinite regularizer, while the transport marginal fixes the total unlabeled mass assigned to each class.
+
+\section{Mass-conserving semantic NMF}
+
+\subsection{Notation and high-order diffusion}
+
+Let $X=[x_1,\ldots,x_n]\in\R_+^{d\times n}$ contain $n$ nonnegative samples. The first $n_L$ samples are labeled and the remaining $n_U=n-n_L$ samples are unlabeled. Let $c$ be the number of classes and $Y_L\in\{0,1\}^{n_L\times c}$ the labeled one-hot matrix. A hypergraph incidence matrix $H$ and nonnegative hyperedge weights $W$ define a symmetric normalized transition matrix $P$. The $k$-step diffusion operator is
+\begin{equation}
+L_k=I-P^k.
+\label{eq:Lk}
+\end{equation}
+The implementation symmetrizes $P$ and $L_k$. Since the eigenvalues of the normalized symmetric transition lie in $[-1,1]$, $L_k$ is positive semidefinite.
+
+\subsection{Transport-polytope semantic constraint}
+
+MCS-NMF learns a basis $U\in\R_+^{d\times c}$ and semantic coefficients $F=[F_L^\top,F_U^\top]^\top\in\R_+^{n\times c}$ by
+\begin{equation}
+\min_{U,F}\;\mathcal J(U,F)=\lVert X-UF^\top\rVert_F^2+\alpha\Tr(F^\top L_kF)
+\label{eq:objective}
+\end{equation}
+subject to
+\begin{equation}
+U\ge0,\quad F_L=Y_L,\quad F_U\one_c=\one_{n_U},\quad
+F_U^\top\one_{n_U}=n_U\pi_L,
+\label{eq:constraints}
+\end{equation}
+where
+\begin{equation}
+\pi_L=\frac{Y_L^\top\one_{n_L}}{n_L}.
+\label{eq:prior}
+\end{equation}
+Thus, each unlabeled row is a probability vector and the total unlabeled class mass follows the labeled proportions. The feasible set
+\begin{equation}
+\mathcal T(\pi_L)=\{Q\ge0:Q\one_c=\one_{n_U},\;Q^\top\one_{n_U}=n_U\pi_L\}
+\end{equation}
+is a transport polytope. Figure~\ref{fig:mechanism} summarizes the mechanism.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.96\linewidth]{mechanism.png}
+\caption{Mechanism of MCS-NMF. High-order diffusion supplies local structural information, while the transport-polytope constraint preserves the prescribed unlabeled semantic mass across classes.}
+\label{fig:mechanism}
+\end{figure}
+
+\subsection{Optimization}
+
+For fixed $F$, the multiplicative update of the basis is
+\begin{equation}
+U\leftarrow U\odotm\frac{XF}{U(F^\top F)+\varepsilon}.
+\label{eq:Uupdate}
+\end{equation}
+The gradient with respect to $F$ is
+\begin{equation}
+\nabla_F\mathcal J=2\{F(U^\top U)-X^\top U+\alpha L_kF\}.
+\label{eq:Fgradient}
+\end{equation}
+For a trial step $\eta>0$, the unlabeled block is updated in exponentiated form,
+\begin{equation}
+K=\max(F_U,\varepsilon)\odotm\exp\{-\eta(\nabla_F\mathcal J)_U\}.
+\label{eq:mirrortrial}
+\end{equation}
+Alternating row and column scaling projects $K$ numerically onto $\mathcal T(\pi_L)$:
+\begin{equation}
+Q\leftarrow\operatorname{diag}\!\left(\frac{\one}{Q\one}\right)Q,
+\qquad
+Q\leftarrow Q\operatorname{diag}\!\left(\frac{n_U\pi_L}{Q^\top\one}\right).
+\label{eq:sinkhorn}
+\end{equation}
+The trial is accepted when its objective is finite and no larger than the objective before the semantic update; otherwise $\eta$ is halved.
+
+\begin{algorithm}[t]
+\caption{MCS-NMF}
+\label{alg:mcsnmf}
+\begin{minipage}{0.96\linewidth}
+\small
+\textbf{Input:} $X,Y_L,L_k,\alpha$, maximum cycles $T$, tolerance $\epsilon$.\\
+\textbf{Initialize:} $U>0$, $F_U>0$; set $F_L=Y_L$ and scale $F_U$ into $\mathcal T(\pi_L)$.\\
+\textbf{for} $t=1,\ldots,T$ \textbf{do}\\
+\quad Update $U$ by Eq.~\eqref{eq:Uupdate}.\\
+\quad Compute the gradient in Eq.~\eqref{eq:Fgradient}.\\
+\quad Form the exponentiated trial in Eq.~\eqref{eq:mirrortrial}.\\
+\quad Apply alternating marginal scaling in Eq.~\eqref{eq:sinkhorn}.\\
+\quad Accept the trial if the objective does not increase; otherwise halve the step.\\
+\quad Restore $F_L=Y_L$ and test the relative objective change.\\
+\textbf{end for}\\
+\textbf{Output:} $U,F$ and $\hat y_i=\arg\max_j F_{ij}$.
+\end{minipage}
+\end{algorithm}
+
+\subsection{Computational complexity}
+
+Let $d$, $n$, and $c$ denote the feature, sample, and class counts, let $s=\operatorname{nnz}(L_k)$, and let $R$ and $B$ denote the numbers of marginal-scaling iterations and semantic backtracking trials. One alternating cycle requires
+\begin{equation}
+\mathcal O\!\left(dnc+nc^2+sc+B(dnc+nc^2+sc+Rnc)\right),
+\end{equation}
+with memory cost $\mathcal O(dn+dc+nc+s)$. In the present implementation, exact neighbor search used to construct the graph costs $\mathcal O(dn^2)$; the sparse transition representation limits the subsequent diffusion and semantic operations to the observed graph support.
+
+\subsection{Objective-value convergence}
+
+\begin{proposition}
+Assume that every accepted semantic trial is finite and belongs to $\mathcal T(\pi_L)$. The alternating cycles of Algorithm~\ref{alg:mcsnmf} preserve nonnegativity and the constraints in Eq.~\eqref{eq:constraints}. Moreover, the sequence $\{\mathcal J(U^{(t)},F^{(t)})\}$ is nonincreasing and converges to a finite limit.
+\end{proposition}
+\begin{proof}
+The multiplicative basis update preserves nonnegativity and is the standard auxiliary-function update for the Frobenius NMF block, hence it does not increase the reconstruction objective for fixed $F$. The semantic trial is positive before marginal scaling. Alternating positive row and column scaling preserves nonnegativity and enforces the two marginals numerically; the labeled block is then restored exactly. Backtracking accepts the semantic block only if the complete objective does not increase. Therefore every accepted cycle is nonincreasing. Both terms in Eq.~\eqref{eq:objective} are nonnegative because $L_k\succeq0$, so the objective sequence is bounded below by zero and consequently converges.
+\end{proof}
+
+\begin{remark}
+The proposition establishes feasibility preservation and convergence in objective value. The stopping rule uses relative objective change, and the implementation records row and column marginal residuals together with objective monotonicity.
+\end{remark}
+
+\section{Experiments}
+
+\subsection{Datasets and evaluation protocol}
+
+We used nine image and handwritten-digit datasets. Table~\ref{tab:datasets} reports their dimensions. All sample vectors were made nonnegative when necessary and normalized to unit Euclidean norm.
+
+\begin{table}[H]
+\centering
+\caption{Dataset statistics.}
+\label{tab:datasets}
+\footnotesize
+\renewcommand{\arraystretch}{0.90}
+\begin{tabular}{lrrr}
+\toprule
+Dataset & Samples & Features & Classes\\
+\midrule
+AR & 1680 & 2000 & 120\\
+PIE & 2856 & 1024 & 68\\
+MSRA25 & 1799 & 256 & 12\\
+YaleB & 2414 & 1024 & 38\\
+COIL20 & 1440 & 1024 & 20\\
+COIL100 & 7200 & 1024 & 100\\
+MNIST & 6996 & 784 & 10\\
+Palm & 2000 & 256 & 100\\
+Optdigits & 5620 & 64 & 10\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\enlargethispage{4\baselineskip}
+
+For every class containing $n_q$ samples, $\lceil0.1n_q\rceil$ samples were labeled. All methods used the same 20 class-stratified labeled sets, and only unlabeled samples entered evaluation. We compared MCS-NMF with HLPNMF, LpCNMF, PNLPSCONMF, SPNMF, CSDCP, LP, GOCNMF, OCSNMF, SNMFWLP, DSSNMF, ERDNMF, and LSAGNMTF. The six metrics were ACC, NMI, Purity, pair-counting F-score, Precision, and Recall. ACC used evaluation-only optimal assignment \cite{Kuhn1955Hungarian}; NMI followed the geometric-entropy normalization \cite{Vinh2010NMI}.
+
+\input{main_results_table.tex}
+
+Figure~\ref{fig:heatmap} summarizes ACC and NMI across the full comparison. It is used as a visual overview; exact values remain in Table~\ref{tab:unified_main}.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.96\textwidth]{main_heatmap.png}
+\caption{Mean ACC and NMI for MCS-NMF and 12 baselines on nine datasets under the shared paired protocol.}
+\label{fig:heatmap}
+\end{figure}
+
+\subsection{Paired statistical analysis}
+
+For each baseline, dataset, and metric, we formed the within-mask difference between MCS-NMF and the baseline. We used two-sided paired $t$-tests, 10,000 paired bootstrap resamples, and Holm adjustment within each metric family. The analysis contains 648 comparisons. MCS-NMF had a positive mean difference in 107 of 108 comparisons for ACC, NMI, Purity, F-score, and Recall, and in all 108 Precision comparisons. The bootstrap interval lay entirely above zero in 104 ACC, 106 NMI, 104 Purity, and 105 F-score, Precision, and Recall comparisons.
+
+The main exception was AR versus ERDNMF: the ACC difference was $-1.281$ percentage points with a 95\% bootstrap interval of $[-2.170,-0.410]$. On Optdigits, the NMI difference relative to HLPNMF was $-0.008$ points with an interval of $[-0.099,0.085]$. Figure~\ref{fig:paired} shows the paired ACC and NMI effects against the prespecified comparator HLPNMF.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.94\textwidth]{paired_differences.png}
+\caption{Paired ACC and NMI differences between MCS-NMF and HLPNMF. Points are mean paired differences; bars are 95\% percentile-bootstrap intervals from 10,000 paired resamples.}
+\label{fig:paired}
+\end{figure}
+
+Table~\ref{tab:paired_significance} condenses the Holm-adjusted ACC and NMI tests and reports the distinct outcomes on AR and Optdigits.
+
+\input{paired_significance_table.tex}
+
+\subsection{Influence of supervision}
+
+We varied the requested supervision ratio over $\{5\%,10\%,15\%,20\%,30\%\}$ on PIE, MSRA25, COIL20, and MNIST using paired labeled sets within each budget. Figure~\ref{fig:supervision} shows that increasing supervision generally improves ACC and NMI, with the largest gains occurring at the lower budgets. The comparison also shows the effect of mass conservation under limited labels.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.48\textwidth]{supervision_acc.png}\hfill
+\includegraphics[width=0.48\textwidth]{supervision_nmi.png}
+\caption{Influence of the supervision ratio on ACC and NMI.}
+\label{fig:supervision}
+\end{figure}
+
+\subsection{Parameter sensitivity}
+
+We varied the diffusion weight $\alpha\in\{10^{-3},10^{-2},10^{-1},1,10,10^2,10^3\}$, neighborhood size $p\in\{2,3,5,7,10\}$, propagation order $k\in\{1,\ldots,6\}$, and iteration limit $T\in\{10,15,20,25,30,35,40\}$. Figure~\ref{fig:parameters} reports ACC and NMI on eight datasets. Performance improves sharply as $\alpha$ moves from an under-regularized range and then stabilizes on most datasets. The preferred neighborhood size is data dependent, while the curves over $k$ and $T$ are comparatively stable after their initial region.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.99\textwidth]{parameter_sensitivity_full.png}
+\caption{ACC and NMI sensitivity to $\alpha$, neighborhood size $p$, propagation order $k$, and iteration limit $T$.}
+\label{fig:parameters}
+\end{figure}
+
+\subsection{Robustness and ablation}
+
+We corrupted $10\%$--$50\%$ of the samples in COIL20, YaleB, and PIE using either salt-and-pepper noise of density 0.1 or a random $5\times5$ black block. Each condition used five paired runs. Figure~\ref{fig:noiseexamples} illustrates both corruptions. Figures~\ref{fig:noiserobustness} and \ref{fig:robustness} show that MCS-NMF retains higher ACC and NMI than HLPNMF throughout the salt-and-pepper tests. The block-occlusion curves record the strongest separation at severe corruption on YaleB and PIE.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.78\textwidth]{noise_examples.png}
+\caption{Examples of original COIL20 images, salt-and-pepper corruption, and $5\times5$ block occlusion.}
+\label{fig:noiseexamples}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.99\textwidth]{noise_robustness_full.png}
+\caption{ACC and NMI of MCS-NMF and HLPNMF under salt-and-pepper noise on COIL20, YaleB, and PIE, together with the representative COIL20 block-occlusion result.}
+\label{fig:noiserobustness}
+\end{figure}
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.94\textwidth]{block_robustness.png}
+\caption{ACC and NMI under block occlusion on three image datasets.}
+\label{fig:robustness}
+\end{figure}
+
+We further tested incorrect supervision by replacing $0\%$--$40\%$ of the labeled targets, within each class, by uniformly selected incorrect classes. The class-stratified $10\%$ labeled masks, corrupted targets, and initializations were paired across MCS-NMF, HLPNMF, SNMFWLP, and OCSNMF over 20 runs. Figures~\ref{fig:labelnoiseacc} and \ref{fig:labelnoisenmi} show that MCS-NMF achieves the strongest overall results on COIL20 and outperforms SNMFWLP and OCSNMF on PIE and YaleB. MCS-NMF and HLPNMF produce adjacent curves on PIE and YaleB. At $40\%$ label noise on MNIST, MCS-NMF records ACC of $87.93\%$ and NMI of $75.14\%$; HLPNMF records the highest scores at the largest corruption levels. The discrete class-wise corruption counts produce the small nonmonotonic changes on PIE and YaleB.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{label_noise_acc.png}
+\caption{ACC under incorrect labels. Curves report means from 20 paired runs using common labeled masks and corrupted targets.}
+\label{fig:labelnoiseacc}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{label_noise_nmi.png}
+\caption{NMI under incorrect labels under the protocol of Fig.~\ref{fig:labelnoiseacc}.}
+\label{fig:labelnoisenmi}
+\end{figure}
+
+We next audited the aggregate class mass produced by HLPNMF under the same 20 paired labeled masks used in the main comparison. Figure~\ref{fig:massdrift}(a) reports total-variation distance from the labeled class prior. The labeled prior closely tracks the true unlabeled proportion, whereas HLPNMF produces excess mass drift on every dataset, reaching $19.53\%$ on AR, $8.46\%$ on YaleB, and $6.56\%$ on COIL100. MCS-NMF matches its prescribed target by construction. Within-dataset Spearman correlations between excess drift and clustering error exceed $0.5$ on six datasets [Fig.~\ref{fig:massdrift}(b)], connecting the controlled quantity directly to clustering behavior.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{class_mass_drift.png}
+\caption{Class-mass audit over 20 paired runs. (a) Deviation of the labeled prior from the true unlabeled proportion and deviation of predicted aggregate semantics from the labeled prior. (b) Within-dataset association between HLPNMF excess mass drift and clustering error.}
+\label{fig:massdrift}
+\end{figure}
+
+Figure~\ref{fig:masstrajectory} traces the same quantity during optimization. MCS-NMF maintains the prescribed aggregate semantic mass throughout all accepted cycles. Under the identical labeled masks, HLPNMF drift increases from below $0.5\%$ to $7.9\%$ on COIL20 and to $10.0\%$ on PIE. The trajectories show that the global allocation distortion develops progressively during unconstrained propagation.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth,trim=55 10 55 10,clip]{mass_trajectory.png}
+\caption{Evolution of aggregate class-mass deviation on representative paired runs. Total-variation distance is measured from the labeled class prior after row normalization of the semantic coefficients.}
+\label{fig:masstrajectory}
+\end{figure}
+
+Figure~\ref{fig:ablation} and Table~\ref{tab:controlled_ablation} isolate three components under the same labeled masks and five paired runs. The row-only variant removes the column marginal, the no-diffusion variant sets $\alpha=0$, and the first-order variant replaces the selected $k>1$ by $k=1$. The first two comparisons cover all eight core datasets; the propagation-order comparison uses the four datasets for which the selected full model has $k>1$. Diffusion contributes the largest mean change, while mass conservation and high-order propagation provide smaller positive gains. Because the target marginal is estimated from labeled samples, Fig.~\ref{fig:prior} additionally varies controlled prior bias.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.98\textwidth]{controlled_ablation.png}
+\caption{Controlled ablation of mass conservation, diffusion regularization, and propagation order. Dashes mark datasets whose selected full model already uses $k=1$.}
+\label{fig:ablation}
+\end{figure}
+
+\input{controlled_ablation_table.tex}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{prior_sensitivity.png}
+\caption{Sensitivity of MCS-NMF to controlled perturbations of the class-mass prior.}
+\label{fig:prior}
+\end{figure}
+
+We also evaluated class imbalance using exponential long-tail subsets whose smallest class retained one quarter of the samples in the largest class. The class-stratified $10\%$ supervision protocol and 20 paired runs were retained. Figure~\ref{fig:longtail} shows that MCS-NMF achieves the highest ACC, NMI, and macro-F1 on COIL20 and PIE. Its paired improvements over HLPNMF are $3.50$, $1.68$, and $4.94$ percentage points on COIL20 and $2.09$, $0.90$, and $2.77$ points on PIE; all six $95\%$ bootstrap intervals exclude zero. On MNIST, SNMFWLP achieves the highest four metrics, followed by MCS-NMF in ACC, NMI, and macro-F1. OCSNMF and SNMFWLP obtain higher tail-class recall on several conditions. The result separates overall partition quality from minority-class recovery under a strongly skewed class distribution.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{longtail_comparison.png}
+\caption{Long-tail clustering under a $4{:}1$ head-to-tail sample ratio. Bars and error bars report means and standard deviations over 20 paired runs. Tail recall averages recall over the smallest quarter of classes.}
+\label{fig:longtail}
+\end{figure}
+
+\subsection{Scalability and runtime}
+
+Using the available PIE benchmark, we formed nested subsets containing 420, 840, 1680, and 2856 samples from 10, 20, 40, and 68 classes. Figure~\ref{fig:scaling} compares MCS-NMF with SPNMF and GOCNMF using identical subsets and paired labeled masks. MCS-NMF retains ACC above $96\%$ and NMI above $97\%$ at every scale; GOCNMF remains above $94\%$ on both metrics, whereas SPNMF declines as the number of classes increases. MCS-NMF runtime grows from 1.86 to 33.64 seconds, stored graph arrays from 0.44 to 3.75 MiB, and transition-structure sparsity from $91.57\%$ to $98.16\%$. Table~\ref{tab:runtime} compares nine methods using end-to-end timings that include graph construction, optimization, and the native decision step. MCS-NMF is faster than HLPNMF on COIL100, MNIST, and Optdigits and faster than SPNMF and CSDCP on every dataset. Its additional class-mass and semantic optimization makes it slower than the simpler LP, GOCNMF, OCSNMF, and LpCNMF pipelines.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.90\textwidth]{pie_scaling_reference.png}
+\caption{PIE scalability. ACC and NMI compare MCS-NMF with SPNMF and GOCNMF; the lower panels report MCS-NMF transition sparsity, runtime, and stored graph-array size.}
+\label{fig:scaling}
+\end{figure}
+
+The empirical scaling trend agrees with the operation-count analysis. Across the four PIE subsets, the logarithm of measured runtime has correlation $0.994$ with the logarithm of the normalized complexity proxy, and the fitted runtime slope with respect to $n$ is $1.49$. Figure~\ref{fig:complexityruntime} confirms the predicted growth trend.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\textwidth]{complexity_runtime_alignment.png}
+\caption{Alignment between measured MCS-NMF runtime and the normalized operation-count proxy on nested PIE subsets. Both axes use logarithmic scaling.}
+\label{fig:complexityruntime}
+\end{figure}
+
+\input{runtime_table.tex}
+
+\subsection{Representation visualization and convergence}
+
+Figure~\ref{fig:tsne} compares t-SNE projections of the original features, HLPNMF coefficients, and MCS-NMF semantic coefficients using identical stratified samples within each dataset. Both factorization methods improve class organization relative to the original space. MCS-NMF produces compact semantic groups on COIL20 and MSRA25 and organizes the overlapping YaleB representation into clearer local groups.
+
+\begin{figure}[!htbp]
+\centering
+\includegraphics[width=0.98\textwidth]{tsne.png}
+\caption{t-SNE projections of original features, HLPNMF coefficients, and MCS-NMF semantic coefficients. Colors denote ground-truth classes; identical samples and color maps are used within each dataset.}
+\label{fig:tsne}
+\end{figure}
+
+The objective trajectories in Fig.~\ref{fig:convergence} decrease rapidly and then stabilize. Across the audited core runs, all factors and objective values were finite, the maximum final row-marginal error was below $9.65\times10^{-11}$, and the maximum column-marginal error was below $7.05\times10^{-12}$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.86\linewidth]{convergence.png}
+\caption{Median MCS-NMF objective value over alternating cycles.}
+\label{fig:convergence}
+\end{figure}
+\FloatBarrier
+
+\section{Discussion}
+
+The experiments identify two roles of the transport constraint. First, it prevents unrestricted drift of aggregate class evidence during diffusion. Second, it acts as a global regularizer coupled to reconstruction. Its effect therefore depends on the labeled marginal and the dataset geometry. The empirical labeled prior is parameter free and effective across the main benchmarks, while the row-only ablation and prior-shift audit show that it is not equivalent to knowing the true unlabeled class proportions.
+
+On AR, ERDNMF achieves the highest ACC and MCS-NMF achieves the highest NMI. On Optdigits, the paired NMI interval for MCS-NMF versus HLPNMF crosses zero. These results assign the leading method separately by dataset and metric. The solver preserves feasibility and monotone objective values, with numerical projection and relative-objective change defining its stopping behavior.
+
+\section{Conclusion}
+
+We presented MCS-NMF, a semi-supervised factorization model that places the unlabeled semantic coefficients in a labeled-prior transport polytope. The model combines reconstruction, high-order diffusion, row-simplex semantics, and aggregate class-mass conservation without adding a new regularization coefficient. An alternating multiplicative and exponentiated-gradient solver preserves feasibility and converges in objective value. Paired experiments on nine datasets and 12 baselines establish the performance gains and quantify the metric-specific outcomes on AR and Optdigits. Parameter, robustness, ablation, class-mass, long-tail, convergence, scalability, and t-SNE results characterize the global semantic constraint.
+
+\section*{Data and code availability}
+The benchmark data follow the public HLPNMF experimental collection, with Optdigits obtained from the standard UCI version. The implementation, fixed supervision masks, per-run outputs, and scripts used to generate the tables and figures are available at \url{https://github.com/matrix-research-lab-Wf/ScaleSem-NMF}.
+
+\section*{Declaration of competing interest}
+The authors declare no competing interests.
+
+\section*{Declaration of generative AI use}
+During the preparation of this work, the authors used a generative AI tool to improve the language and readability of the manuscript. The authors reviewed and edited the resulting text and take full responsibility for the content of the article.
+
+\begin{thebibliography}{99}
+\bibitem{Jain1999Clustering} A. K. Jain, M. N. Murty, P. J. Flynn, Data clustering: A review, ACM Computing Surveys 31(3) (1999) 264--323.
+\bibitem{Jain2010Clustering} A. K. Jain, Data clustering: 50 years beyond K-means, Pattern Recognition Letters 31(8) (2010) 651--666.
+\bibitem{Bair2013SSC} E. Bair, Semi-supervised clustering methods, WIREs Computational Statistics 5(5) (2013) 349--361.
+\bibitem{VanEngelen2020Survey} J. E. van Engelen, H. H. Hoos, A survey on semi-supervised learning, Machine Learning 109(2) (2020) 373--440.
+\bibitem{Lee1999NMF} D. D. Lee, H. S. Seung, Learning the parts of objects by non-negative matrix factorization, Nature 401 (1999) 788--791.
+\bibitem{Lee2001Algorithms} D. D. Lee, H. S. Seung, Algorithms for non-negative matrix factorization, Advances in Neural Information Processing Systems 13 (2001) 556--562.
+\bibitem{Gillis2014WhyHow} N. Gillis, The why and how of nonnegative matrix factorization, in: Regularization, Optimization, Kernels, and Support Vector Machines, Chapman and Hall/CRC, 2014, pp. 275--310.
+\bibitem{Liu2012CNMF} H. Liu, Z. Wu, X. Li, D. Cai, T. S. Huang, Constrained nonnegative matrix factorization for image representation, IEEE TPAMI 34(7) (2012) 1299--1311.
+\bibitem{Cai2011GNMF} D. Cai, X. He, J. Han, T. S. Huang, Graph regularized nonnegative matrix factorization for data representation, IEEE TPAMI 33(8) (2011) 1548--1560.
+\bibitem{Zeng2014HypergraphNMF} K. Zeng, J. Yu, C. Li, J. You, T. Jin, Image clustering by hypergraph regularized non-negative matrix factorization, Neurocomputing 138 (2014) 209--217.
+\bibitem{Yi2015LpSNMF} Y. Yi, Y. Shi, H. Zhang, J. Wang, J. Kong, Label propagation based semi-supervised non-negative matrix factorization for feature extraction, Neurocomputing 149 (2015) 1021--1037.
+\bibitem{Lan2022LPNMF} L. Lan, T. Liu, X. Zhang, C. Xu, Z. Luo, Label propagated nonnegative matrix factorization for clustering, IEEE TKDE 34(1) (2022) 340--351.
+\bibitem{Wang2015ConstraintNMF} D. Wang, X. Gao, X. Wang, Semi-supervised nonnegative matrix factorization via constraint propagation, IEEE Transactions on Cybernetics 46(1) (2016) 233--244.
+\bibitem{Wang2022PNLP} C. Wang, J. Zhang, T. Wu, M. Zhang, G. Shi, Semi-supervised NMF with positive and negative label propagations, Applied Intelligence 52(9) (2022) 9739--9750.
+\bibitem{Yin2023HSSNMF} J. Yin, S. Peng, Z. Yang, B. Chen, Z. Lin, Hypergraph based semi-supervised symmetric NMF for image clustering, Pattern Recognition 137 (2023) 109274.
+\bibitem{Mo2024PNLPSCNMF} Y. Mo, X. Li, J. Mei, Semi-supervised NMF with label propagation and constraint propagation, Engineering Applications of Artificial Intelligence 133 (2024) 108196.
+\bibitem{Li2025GOCNMF} J. Li, C. Li, Graph regularized one-hot-constrained NMF for data representation, Engineering Applications of Artificial Intelligence 156 (2025) 111224.
+\bibitem{Li2025OCSNMF} J. Li, C. Li, One-hot constrained symmetric NMF for image clustering, Pattern Recognition 162 (2025) 111427.
+\bibitem{Yang2025SPNMF} X. Yang, T. Zhu, S. Peng, F. Nie, Z. Lin, Semi-supervised pivotal-aware NMF with label and pairwise constraint propagation, Pattern Recognition 157 (2025) 110933.
+\bibitem{Li2026HLPNMF} J. Li, X. Zhou, X. Shen, C. Li, High-order label propagation-guided NMF for semi-supervised clustering, Pattern Recognition 180 (2026) 114657.
+\bibitem{Yang2016Doubly} Z. Yang, J. Corander, E. Oja, Low-rank doubly stochastic matrix decomposition for cluster analysis, Journal of Machine Learning Research 17 (2016) 1--25.
+\bibitem{Tai2021Sinkhorn} K. S. Tai, P. Bailis, G. Valiant, Sinkhorn label allocation: Semi-supervised classification via annealed self-training, in: ICML, 2021, pp. 10065--10075.
+\bibitem{Wang2026BSNMF} J. Wang, B. Yao, Y. Ma, G. Wu, R. Zhao, F. Nie, Balanced symmetric non-negative matrix factorization, Neurocomputing 695 (2026) 134013.
+\bibitem{Li2022SinkhornNMF} S. Li, W. Li, P. Gan, L. Jiang, Multi-constrained non-negative matrix factorization algorithm based on Sinkhorn distance feature scaling, Journal of Electronics \& Information Technology 44(12) (2022) 4384--4394.
+\bibitem{Xing2021DSSNMF} Z. Xing, M. Wen, J. Peng, J. Feng, Discriminative semi-supervised NMF for data clustering, Engineering Applications of Artificial Intelligence 103 (2021) 104289.
+\bibitem{Li2025EDNMF} J. Li, X. Shen, C. Li, Y. Li, Elements discriminative NMF for data clustering, Engineering Applications of Artificial Intelligence 156 (2025) 111210.
+\bibitem{Xing2021GNMFLD} Z. Xing, Y. Ma, X. Yang, F. Nie, Graph regularized NMF with label discrimination for data clustering, Neurocomputing 440 (2021) 297--309.
+\bibitem{Peng2021CSNMF} S. Peng, W. Ser, B. Chen, Z. Lin, Robust semi-supervised NMF for image clustering, Pattern Recognition 111 (2021) 107683.
+\bibitem{Chavoshinejad2023S4NMF} J. Chavoshinejad, S. A. Seyedi, F. Akhlaghian Tab, N. Salahian, Self-supervised semi-supervised NMF for data clustering, Pattern Recognition 137 (2023) 109282.
+\bibitem{Zhu2003GaussianFields} X. Zhu, Z. Ghahramani, J. Lafferty, Semi-supervised learning using Gaussian fields and harmonic functions, in: ICML, 2003, pp. 912--919.
+\bibitem{Zhou2004LGC} D. Zhou, O. Bousquet, T. N. Lal, J. Weston, B. Sch"olkopf, Learning with local and global consistency, Advances in Neural Information Processing Systems 16 (2004).
+\bibitem{Jing2026SNMFWLP} W. Jing, L. Lu, W. Ou, Semi-supervised NMF with weighted label propagation for data representation, Signal Processing 241 (2026) 110407.
+\bibitem{Qiao2018GraphReview} L. Qiao, L. Zhang, S. Chen, D. Shen, Data-driven graph construction and graph learning: A review, Neurocomputing 312 (2018) 336--351.
+\bibitem{Gao2022HypergraphReview} Y. Gao, Z. Zhang, H. Lin, X. Zhao, S. Du, C. Zou, Hypergraph learning: Methods and practices, IEEE TPAMI 44(5) (2022) 2548--2566.
+\bibitem{Song2023GSSLReview} Z. Song, X. Yang, Z. Xu, I. King, Graph-based semi-supervised learning: A comprehensive review, IEEE TNNLS 34(11) (2023) 8174--8194.
+\bibitem{Kuhn1955Hungarian} H. W. Kuhn, The Hungarian method for the assignment problem, Naval Research Logistics Quarterly 2 (1955) 83--97.
+\bibitem{Vinh2010NMI} N. X. Vinh, J. Epps, J. Bailey, Information theoretic measures for clusterings comparison, Journal of Machine Learning Research 11 (2010) 2837--2854.
+\end{thebibliography}
+
+\end{document}
