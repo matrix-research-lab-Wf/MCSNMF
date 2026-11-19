@@ -1,6 +1,0 @@
-Highlights
-
-- A transport polytope constrains unlabeled semantic coefficients in NMF.
-- Class mass is conserved during high-order diffusion without a new weight.
-- MCS-NMF is compared with 12 baselines on nine benchmark datasets.
-- Paired, robustness, long-tail, and scalability tests validate the model.
