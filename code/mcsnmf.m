@@ -6,10 +6,12 @@ alpha = get_opt(opts,'alpha',1000);
 maxit = get_opt(opts,'maxit',100);
 tol = get_opt(opts,'tol',1e-7);
 seed = get_opt(opts,'seed',1);
+mass_conservation = get_opt(opts,'mass_conservation',true);
 rng(seed,'twister');
 [d,n] = size(X); c = size(Y,2);
 unlabeled = ~logical(labeled(:));
 target = sum(unlabeled) * sum(Y(labeled,:),1) / sum(labeled);
+if ~mass_conservation, target = []; end
 U = max(rand(d,c),eps);
 F = max(rand(n,c),eps);
 F(labeled,:) = Y(labeled,:);
@@ -18,7 +20,13 @@ objective = zeros(maxit+1,1);
 objective(1) = obj(X,U,F,L,alpha);
 step = [];
 for it = 1:maxit
-    U = U .* ((X*F) ./ max(U*(F'*F),1e-12));
+    base_u = obj(X,U,F,L,alpha);
+    denominator = U*(F'*F);
+    Ucandidate = U .* ((X*F) ./ max(denominator,1e-12));
+    candidate_u = obj(X,Ucandidate,F,L,alpha);
+    if isfinite(candidate_u) && candidate_u <= base_u + 1e-12*max(1,abs(base_u))
+        U = Ucandidate;
+    end
     grad = 2*(F*(U'*U)-X'*U+alpha*(L*F));
     base = obj(X,U,F,L,alpha);
     if isempty(step), step = 1/max(2*(norm(U'*U,2)+alpha),1e-12);
@@ -39,10 +47,16 @@ Fu = F(unlabeled,:);
 info.iterations = it;
 info.objective = objective;
 info.max_row_error = max(abs(sum(Fu,2)-1));
-info.max_column_error = max(abs(sum(Fu,1)-target));
+if isempty(target), info.max_column_error = NaN;
+else, info.max_column_error = max(abs(sum(Fu,1)-target)); end
 end
 
 function P = transport_project(K,target,maxit)
+if isempty(target)
+    P = max(K,1e-300);
+    P = bsxfun(@rdivide,P,max(sum(P,2),1e-300));
+    return;
+end
 P = max(K,1e-300); target = max(target,1e-12);
 target = target*(size(P,1)/sum(target));
 for t = 1:maxit
