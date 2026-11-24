@@ -7,11 +7,9 @@ Official MATLAB implementation and reproducibility material for **Mass-Conservin
 - `code/mcsnmf.m`: core MCS-NMF optimizer.
 - `code/build_high_order_laplacian.m`: high-order hypergraph operator.
 - `code/run_mcsnmf.m`: dataset-level entry point.
-- `experiments/run_post_sinkhorn_comparison.m`: paired Row-only, Post-Sinkhorn, and MCS-NMF experiment.
-- `experiments/run_all_proposed_method.m`: nine-dataset reproduction entry point.
+- `experiments/run_all_proposed_method.m`: nine-dataset MCS-NMF reproduction entry point.
 - `protocol/`: the 20 paired labeled/unlabeled splits used in the main comparison.
 - `results/`: six-metric summaries, paired statistics, runtime, robustness, ablation, and sensitivity results.
-- `manuscript/`: LaTeX source, figures, Highlights, and compiled manuscript.
 
 ## Requirements
 
@@ -56,25 +54,18 @@ To reproduce the proposed-method runs on all nine datasets:
 addpath('code');
 addpath('experiments');
 run_all_proposed_method;
-summarize_post_sinkhorn;
 ```
 
 For one dataset:
 
 ```matlab
-run_post_sinkhorn_comparison('COIL20');
+result = run_mcsnmf('data/COIL20.mat', ...
+    'protocol/COIL20/COIL20_seed20260627.mat', 2, 3);
 ```
-
-This experiment uses the same 20 saved masks for three paired variants:
-
-- `Row-only`: simplex rows without the class-mass column marginal;
-- `Post-Sinkhorn`: one marginal projection applied after Row-only training;
-- `MCS-NMF`: the class-mass marginal enforced throughout optimization.
-
-The completed paired runs and 10,000-resample interval summary are stored in
-`results/post_sinkhorn_paired_runs.csv` and
-`results/post_sinkhorn_summary.csv`, respectively.
 
 ## Repository scope
 
-This repository contains the proposed method, reproducibility protocol, result summaries, figures, and manuscript source. Temporary files, QA renderings, and machine-specific paths are excluded.
+This repository contains the proposed method, datasets, fixed supervision splits,
+and result summaries required to reproduce the reported experiments. Manuscript
+source, compiled papers, submission files, temporary files, QA renderings, and
+machine-specific paths are excluded.
